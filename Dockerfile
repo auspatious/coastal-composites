@@ -10,6 +10,10 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     ca-certificates \
     build-essential \
+    # odc-algo requires rust
+    rustc \
+    cargo \
+    # Clean up!
     && apt-get autoclean \
     && apt-get autoremove \
     && rm -rf /var/lib/{apt,dpkg,cache,log}
