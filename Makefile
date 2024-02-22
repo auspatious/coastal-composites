@@ -3,12 +3,21 @@ IMAGE=local/composites
 build:
 	docker build --tag ${IMAGE} .
 
+build-clean:
+	docker build --no-cache --tag ${IMAGE} .
+
 run:
-	docker run -it --rm ${IMAGE}\
+	docker run -it --rm \
+		-p 8787:8787 \
+		-v /home/ubuntu/tide_models:/tide_models \
+		${IMAGE}\
 		python src/run_task.py \
-		--region-code "9,19" \
-		--year 2023 \
+		--tile-id "9,18" \
+		--year 2022 \
 		--version "0.0.0" \
-		--resolution 100 \
+		--low-or-high low \
+		--extra-months 6 \
+		--tide-data-location /tide_models \
+		--output-resolution 10 \
 		--output-bucket files.auspatious.com \
 		--overwrite

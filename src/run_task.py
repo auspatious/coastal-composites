@@ -6,6 +6,7 @@ from coastlines.grids import VIETNAM_10
 from dask.distributed import Client
 from dea_tools.coastal import pixel_tides
 from dep_tools.aws import object_exists
+from dep_tools.stac_utils import set_stac_properties
 from dep_tools.azure import blob_exists
 from dep_tools.exceptions import EmptyCollectionError
 from dep_tools.loaders import OdcLoader
@@ -13,6 +14,8 @@ from dep_tools.namers import DepItemPath
 from dep_tools.processors import S2Processor
 from dep_tools.searchers import PystacSearcher
 from dep_tools.utils import get_logger
+
+from datetime import datetime, timedelta
 
 # from dep_tools.task import SimpleLoggingAreaTask
 from dep_tools.writers import AwsDsCogWriter, AzureDsWriter
@@ -32,6 +35,16 @@ TILE_FILE = "https://raw.githubusercontent.com/auspatious/dea-coastlines/stable/
 def get_tile_list() -> pd.DataFrame:
     return pd.read_csv(TILE_FILE)
 
+
+def get_datetime_string(year: int, extra_months: int) -> str:
+    extra_months_datetime = timedelta(days=30 * extra_months)
+
+    start_date = datetime(year=year, month=1, day=1) - extra_months_datetime
+    end_date = datetime(year=year, month=12, day=31) + extra_months_datetime
+
+    datetime_string = f"{start_date:%Y-%m-%d}/{end_date:%Y-%m-%d}"
+
+    return datetime_string
 
 def get_geometry(tile_id: str, grid: GridSpec) -> gpd.GeoDataFrame:
     tile_tuple = tuple(int(i) for i in tile_id.split(","))
@@ -72,10 +85,7 @@ class CoastalCompositesProcessor(S2Processor):
         data = super().process(input_data)
 
         # Remove SCL
-        if "SCL" in data:
-            data = data.drop("SCL")
-        if "scl" in data:
-            data = data.drop("scl")
+        data = data.drop_vars(["scl", "SCL"], errors="ignore")
 
         # Get low resolution tides for the study area
         tides_lowres = pixel_tides(
@@ -110,17 +120,19 @@ def main(
     year: Annotated[int, typer.Option()],
     version: Annotated[str, typer.Option()],
     low_or_high: Annotated[str, typer.Option()] = "low",
+    tide_data_location: str = "~/tide_models",
+    extra_months: int = 12,
     output_bucket: str = None,
     output_resolution: int = 10,
     grid_definition: str = "VIETNAM_10",
     overwrite: Annotated[bool, typer.Option()] = False,
-    memory_limit_per_worker: str = "50GB",
+    memory_limit_per_worker: str = "120GB",
     n_workers: int = 2,
     threads_per_worker: int = 32,
-    xy_chunk_size: int = 4096,
+    xy_chunk_size: int = 2501,
 ) -> None:
     log = get_logger(tile_id, "CoastalCompositesProcessor")
-    log.info(f"Starting processing version {version} for {year}")
+    log.info(f"Starting processing version {version} for {year} with {extra_months} either side")
 
     geom = get_geometry(tile_id, GRIDS[grid_definition])
 
@@ -151,11 +163,13 @@ def main(
             # This is an exit with success
             raise typer.Exit()
 
+    datetime_string = get_datetime_string(year, extra_months)
+
     # A searcher to find the data
     searcher = PystacSearcher(
         catalog="https://earth-search.aws.element84.com/v1/",
         collections=["sentinel-2-l2a"],
-        datetime=f"{year - 1}/{year + 1}",
+        datetime=datetime_string,
     )
 
     # A loader to load them
@@ -185,6 +199,7 @@ def main(
     # A processor to process them
     processor = CoastalCompositesProcessor(
         low_or_high=low_or_high,
+        tide_data_location=tide_data_location,
     )
 
     # And a writer to bind them
@@ -228,6 +243,9 @@ def main(
             log.info(
                 f"Processed data to shape {[output_data.sizes[d] for d in ['x', 'y']]}"
             )
+
+            # Hack for now... need to get it in the standard tools
+            output_data = set_stac_properties(data, output_data)
 
             paths = writer.write(output_data, tile_id)
             if paths is not None:
