@@ -2,7 +2,7 @@ boto3
 dea_tools
 typer
 
-git+https://github.com/auspatious/dea-coatlines.git
+git+https://github.com/auspatious/dea-coastlines.git
 git+https://github.com/digitalearthpacific/dep-tools.git@add-s3-writer
 git+https://github.com/opendatacube/odc-algo.git@57316a8
 
