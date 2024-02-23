@@ -14,6 +14,8 @@ from dep_tools.processors import S2Processor
 from dep_tools.searchers import PystacSearcher
 from dep_tools.utils import get_logger
 
+from coastlines.combined import mask_pixels_by_tide
+
 from odc.geo.geobox import scaled_down_geobox
 
 from datetime import datetime, timezone
@@ -64,8 +66,8 @@ def set_stac_properties(
 
     utc = timezone.utc
     date_format = "%Y-%m-%dT%H:%M:%SZ"
-    date_format_00 = "%Y-%m-%dT%00:00:00Z"
-    date_format_24 = "%Y-%m-%dT%23:59:59Z"
+    date_format_00 = "%Y-%m-%dT00:00:00Z"
+    date_format_24 = "%Y-%m-%dT23:59:59Z"
 
     output_xr.attrs["stac_properties"] = dict(
         start_datetime=start_datetime.astimezone(utc).strftime(date_format_00),
@@ -103,6 +105,7 @@ class CoastalCompositesProcessor(S2Processor):
             filters=[("closing", 5), ("opening", 5), ("dilation", 5)], keep_ints=True
         ),
         tide_data_location: str = "~/Data/tide_models_clipped",
+        mask_pixels_by_tide: bool = True,
         low_or_high: str = "low",
     ) -> None:
         super().__init__(
@@ -117,6 +120,7 @@ class CoastalCompositesProcessor(S2Processor):
         if low_or_high not in ["low", "high"]:
             raise ValueError("low_or_high must be 'low' or 'high'")
         self.low_or_high = low_or_high
+        self.mask_pixels_by_tide = mask_pixels_by_tide
 
     def process(self, input_data: DataArray) -> Dataset:
         data = super().process(input_data)
@@ -141,7 +145,8 @@ class CoastalCompositesProcessor(S2Processor):
         # Filter out unwanted scenes
         data = data.sel(time=filtered.time)
 
-        # TODO: Maybe filter out remaining data per-pixel
+        if self.mask_pixels_by_tide:
+            data = mask_pixels_by_tide(data, self.tide_data_location, 0.0)
 
         # Process the geomad on the remaining data
         output = geomedian_with_mads(data, num_threads=4, work_chunks=(1000, 1000))
