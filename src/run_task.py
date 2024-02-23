@@ -6,7 +6,6 @@ from coastlines.grids import VIETNAM_10
 from dask.distributed import Client
 from dea_tools.coastal import pixel_tides
 from dep_tools.aws import object_exists
-from dep_tools.stac_utils import set_stac_properties
 from dep_tools.azure import blob_exists
 from dep_tools.exceptions import EmptyCollectionError
 from dep_tools.loaders import OdcLoader
@@ -15,7 +14,9 @@ from dep_tools.processors import S2Processor
 from dep_tools.searchers import PystacSearcher
 from dep_tools.utils import get_logger
 
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
+
+from dateutil.relativedelta import relativedelta
 
 # from dep_tools.task import SimpleLoggingAreaTask
 from dep_tools.writers import AwsDsCogWriter, AzureDsWriter
@@ -37,14 +38,42 @@ def get_tile_list() -> pd.DataFrame:
 
 
 def get_datetime_string(year: int, extra_months: int) -> str:
-    extra_months_datetime = timedelta(days=30 * extra_months)
-
-    start_date = datetime(year=year, month=1, day=1) - extra_months_datetime
-    end_date = datetime(year=year, month=12, day=31) + extra_months_datetime
+    months = relativedelta(months=extra_months)
+    start_date = datetime(year=year, month=1, day=1) - months
+    end_date = datetime(year=year, month=12, day=31) + months
 
     datetime_string = f"{start_date:%Y-%m-%d}/{end_date:%Y-%m-%d}"
 
     return datetime_string
+
+
+def set_stac_properties(
+    datetime_string: str, output_xr: DataArray | Dataset
+) -> Dataset | DataArray:
+    # Convert the xarray numpy datetime to a python datetime
+    start, end = datetime_string.split("/")
+    start_datetime = datetime.strptime(
+        start,
+        "%Y-%m-%d",
+    )
+    end_datetime = datetime.strptime(end, "%Y-%m-%d")
+
+    center_time = start_datetime + (end_datetime - start_datetime) / 2
+
+    utc = timezone.utc
+    date_format = "%Y-%m-%dT%H:%M:%SZ"
+    date_format_00 = "%Y-%m-%dT%00:00:00Z"
+    date_format_24 = "%Y-%m-%dT%23:59:59Z"
+
+    output_xr.attrs["stac_properties"] = dict(
+        start_datetime=start_datetime.astimezone(utc).strftime(date_format_00),
+        datetime=center_time.astimezone(utc).strftime(date_format),
+        end_datetime=end_datetime.astimezone(utc).strftime(date_format_24),
+        created=datetime.now().astimezone(utc).strftime(date_format),
+    )
+
+    return output_xr
+
 
 def get_geometry(tile_id: str, grid: GridSpec) -> gpd.GeoDataFrame:
     tile_tuple = tuple(int(i) for i in tile_id.split(","))
@@ -132,7 +161,9 @@ def main(
     xy_chunk_size: int = 2501,
 ) -> None:
     log = get_logger(tile_id, "CoastalCompositesProcessor")
-    log.info(f"Starting processing version {version} for {year} with {extra_months} either side")
+    log.info(
+        f"Starting processing version {version} for {year} with {extra_months} either side"
+    )
 
     geom = get_geometry(tile_id, GRIDS[grid_definition])
 
@@ -245,7 +276,7 @@ def main(
             )
 
             # Hack for now... need to get it in the standard tools
-            output_data = set_stac_properties(data, output_data)
+            output_data = set_stac_properties(datetime_string, output_data)
 
             paths = writer.write(output_data, tile_id)
             if paths is not None:
