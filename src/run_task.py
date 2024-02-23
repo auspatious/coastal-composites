@@ -201,13 +201,7 @@ def main(
 
     tile, geom = get_tile_geometry(tile_id, GRIDS[grid_definition], decimated)
 
-    itempath = get_item_path(
-        "s2",
-        low_or_high,
-        version,
-        year,
-        "ausp"
-    )
+    itempath = get_item_path("s2", low_or_high, version, year, "ausp")
 
     stac_document = itempath.stac_path(
         tile_id,
