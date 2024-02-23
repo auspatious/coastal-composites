@@ -12,7 +12,7 @@ run:
 		-v /home/ubuntu/tide_models:/tide_models \
 		${IMAGE}\
 		python src/run_task.py \
-		--tile-id "9,18" \
+		--tile-id "13,45" \
 		--year 2022 \
 		--version "0.0.0" \
 		--low-or-high low \

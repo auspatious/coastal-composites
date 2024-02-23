@@ -14,6 +14,8 @@ from dep_tools.processors import S2Processor
 from dep_tools.searchers import PystacSearcher
 from dep_tools.utils import get_logger
 
+from odc.geo.geobox import scaled_down_geobox
+
 from datetime import datetime, timezone
 
 from dateutil.relativedelta import relativedelta
@@ -75,14 +77,20 @@ def set_stac_properties(
     return output_xr
 
 
-def get_geometry(tile_id: str, grid: GridSpec) -> gpd.GeoDataFrame:
+def get_tile_geometry(
+    tile_id: str, grid: GridSpec, decimated: bool = False
+) -> gpd.GeoDataFrame:
     tile_tuple = tuple(int(i) for i in tile_id.split(","))
     tile = grid.tile_geobox(tile_tuple)
+
+    if decimated:
+        tile = scaled_down_geobox(tile, 10)
+
     geom = gpd.GeoDataFrame(
         {"geometry": [tile.extent.to_crs("EPSG:4326")]}, crs="EPSG:4326"
     )
 
-    return geom
+    return tile, geom
 
 
 class CoastalCompositesProcessor(S2Processor):
@@ -92,7 +100,7 @@ class CoastalCompositesProcessor(S2Processor):
         load_data: bool = False,
         mask_clouds: bool = True,
         mask_clouds_kwargs: dict = dict(
-            filters=[("closing", 5), ("opening", 5)], keep_ints=True
+            filters=[("closing", 5), ("opening", 5), ("dilation", 5)], keep_ints=True
         ),
         tide_data_location: str = "~/Data/tide_models_clipped",
         low_or_high: str = "low",
@@ -152,7 +160,7 @@ def main(
     tide_data_location: str = "~/tide_models",
     extra_months: int = 12,
     output_bucket: str = None,
-    output_resolution: int = 10,
+    decimated: bool = False,
     grid_definition: str = "VIETNAM_10",
     overwrite: Annotated[bool, typer.Option()] = False,
     memory_limit_per_worker: str = "120GB",
@@ -165,7 +173,7 @@ def main(
         f"Starting processing version {version} for {year} with {extra_months} either side"
     )
 
-    geom = get_geometry(tile_id, GRIDS[grid_definition])
+    tile, geom = get_tile_geometry(tile_id, GRIDS[grid_definition], decimated)
 
     itempath = DepItemPath(
         "s2",
@@ -205,8 +213,6 @@ def main(
 
     # A loader to load them
     loader = OdcLoader(
-        crs=3832,
-        resolution=output_resolution,
         bands=[
             "red",
             "green",
@@ -267,7 +273,7 @@ def main(
             items = searcher.search(geom)
             log.info(f"Found {len(items)} items")
 
-            data = loader.load(items, geom)
+            data = loader.load(items, tile)
             log.info(f"Found {len(data.time)} timesteps to load")
 
             output_data = processor.process(data)
