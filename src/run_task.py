@@ -14,6 +14,8 @@ from dep_tools.processors import S2Processor
 from dep_tools.searchers import PystacSearcher
 from dep_tools.utils import get_logger
 
+from odc.algo import mask_cleanup, erase_bad
+
 from coastlines.combined import mask_pixels_by_tide
 
 from odc.geo.geobox import scaled_down_geobox
@@ -100,9 +102,9 @@ class CoastalCompositesProcessor(S2Processor):
         self,
         send_area_to_processor: bool = False,
         load_data: bool = False,
-        mask_clouds: bool = True,
+        mask_clouds: bool = False,
         mask_clouds_kwargs: dict = dict(
-            filters=[("closing", 5), ("opening", 5), ("dilation", 5)], keep_ints=True
+            filters=[("closing", 5), ("opening", 5)], keep_ints=True
         ),
         tide_data_location: str = "~/Data/tide_models_clipped",
         mask_pixels_by_tide: bool = True,
@@ -111,7 +113,7 @@ class CoastalCompositesProcessor(S2Processor):
         super().__init__(
             send_area_to_processor,
             scale_and_offset=False,
-            harmonize_to_old=True,
+            harmonize_to_old=False,
             mask_clouds=mask_clouds,
             mask_clouds_kwargs=mask_clouds_kwargs,
         )
@@ -125,16 +127,20 @@ class CoastalCompositesProcessor(S2Processor):
     def process(self, input_data: DataArray) -> Dataset:
         data = super().process(input_data)
 
+        mask = data.cloud > 50
+        mask = mask_cleanup(mask, [("dilation", 5)])
+        data = erase_bad(input_data, mask)
+
         # Remove SCL
-        data = data.drop_vars(["scl", "SCL"], errors="ignore")
+        data = data.drop_vars(["scl", "SCL", "cloud"], errors="ignore")
 
         # Get low resolution tides for the study area
         tides_lowres = pixel_tides(
             data, resample=False, directory=self.tide_data_location
         )
 
-        # Calculate the lowest and highest 10% of tides
-        lowest_20, highest_20 = tides_lowres.quantile([0.2, 0.8]).values
+        # Calculate the lowest and highest % of tides
+        lowest_20, highest_20 = tides_lowres.quantile([0.30, 0.70]).values
 
         # Filter our data to low and high tide observations
         if self.low_or_high == "low":
@@ -144,6 +150,8 @@ class CoastalCompositesProcessor(S2Processor):
 
         # Filter out unwanted scenes
         data = data.sel(time=filtered.time)
+
+        print(f"Filtered to {len(data.time)} scenes")
 
         if self.mask_pixels_by_tide:
             data = mask_pixels_by_tide(data, self.tide_data_location, 0.0)
