@@ -40,7 +40,7 @@ TILE_FILE = "https://raw.githubusercontent.com/auspatious/dea-coastlines/stable/
 
 
 def get_tile_list() -> pd.DataFrame:
-    return pd.read_csv(TILE_FILE)
+    return set(pd.read_csv(TILE_FILE).values.flatten())
 
 
 def get_datetime_string(year: int, extra_months: int) -> str:
@@ -95,6 +95,19 @@ def get_tile_geometry(
     )
 
     return tile, geom
+
+
+def get_item_path(
+    base_product: str, low_or_high: str, version: str, year: int, prefix: str
+) -> DepItemPath:
+    return DepItemPath(
+        base_product,
+        f"{low_or_high}_tide_comp_20p",
+        version,
+        year,
+        zero_pad_numbers=True,
+        prefix=prefix,
+    )
 
 
 class CoastalCompositesProcessor(S2Processor):
@@ -188,14 +201,14 @@ def main(
 
     tile, geom = get_tile_geometry(tile_id, GRIDS[grid_definition], decimated)
 
-    itempath = DepItemPath(
+    itempath = get_item_path(
         "s2",
-        f"{low_or_high}_tide_comp_20p",
+        low_or_high,
         version,
         year,
-        zero_pad_numbers=True,
-        prefix="ausp",
+        "ausp"
     )
+
     stac_document = itempath.stac_path(
         tile_id,
     )
