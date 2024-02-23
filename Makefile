@@ -14,10 +14,9 @@ run:
 		python src/run_task.py \
 		--tile-id "13,45" \
 		--year 2022 \
-		--version "0.0.0" \
+		--version "0.0.0c1" \
 		--low-or-high low \
-		--extra-months 6 \
+		--extra-months 12 \
 		--tide-data-location /tide_models \
-		--output-resolution 10 \
 		--output-bucket files.auspatious.com \
 		--overwrite

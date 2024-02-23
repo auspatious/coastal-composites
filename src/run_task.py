@@ -107,7 +107,7 @@ class CoastalCompositesProcessor(S2Processor):
             filters=[("closing", 5), ("opening", 5)], keep_ints=True
         ),
         tide_data_location: str = "~/Data/tide_models_clipped",
-        mask_pixels_by_tide: bool = True,
+        mask_pixels_by_tide: bool = False,
         low_or_high: str = "low",
     ) -> None:
         super().__init__(
@@ -176,14 +176,14 @@ def main(
     decimated: bool = False,
     grid_definition: str = "VIETNAM_10",
     overwrite: Annotated[bool, typer.Option()] = False,
-    memory_limit_per_worker: str = "120GB",
+    memory_limit_per_worker: str = "160GB",
     n_workers: int = 2,
     threads_per_worker: int = 32,
     xy_chunk_size: int = 2501,
 ) -> None:
     log = get_logger(tile_id, "CoastalCompositesProcessor")
     log.info(
-        f"Starting processing version {version} for {year} with {extra_months} either side"
+        f"Starting processing version {version} for {year} with {extra_months} months either side"
     )
 
     tile, geom = get_tile_geometry(tile_id, GRIDS[grid_definition], decimated)
@@ -220,7 +220,7 @@ def main(
     # A searcher to find the data
     searcher = PystacSearcher(
         catalog="https://earth-search.aws.element84.com/v1/",
-        collections=["sentinel-2-l2a"],
+        collections=["sentinel-2-c1-l2a"],
         datetime=datetime_string,
     )
 
@@ -237,7 +237,7 @@ def main(
             "rededge3",
             "swir16",
             "swir22",
-            "scl",
+            "cloud",
         ],
         groupby="solar_day",
         chunks=dict(time=1, x=xy_chunk_size, y=xy_chunk_size),
