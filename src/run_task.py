@@ -197,14 +197,13 @@ def main(
 
     tile, geom = get_tile_geometry(tile_id, GRIDS[grid_definition], decimated)
 
-    itempath = get_item_path("s2", low_or_high, version, year, "ausp")
+    prefix = f"{output_prefix}/ausp" if output_prefix is not None else "ausp"
+
+    itempath = get_item_path("s2", low_or_high, version, year, prefix)
 
     stac_document = itempath.stac_path(
         tile_id,
     )
-
-    if output_prefix is not None:
-        stac_document = f"{output_prefix}/{stac_document}"
 
     # If we don't want to overwrite, and the destination file already exists, skip it
     if not overwrite:
@@ -220,6 +219,10 @@ def main(
             log.info(f"Item already exists at {stac_document}")
             # This is an exit with success
             raise typer.Exit()
+
+    log.info(
+        f"Writing to {stac_document} in {f's3://{output_bucket}' if output_bucket is not None else 'Azure'}"
+    )
 
     datetime_string = get_datetime_string(year, extra_months)
 

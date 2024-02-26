@@ -43,13 +43,15 @@ def main(
         for tile, year in product(list(tiles), years)
     ]
 
+    prefix = f"{output_prefix}/ausp" if output_prefix is not None else "ausp"
+
     # If we don't want to overwrite, then we should only run tasks that don't already exist
     # i.e., they failed in the past or they're missing for some other reason
     if not overwrite:
         valid_tasks = []
         for task in tasks:
             itempath = get_item_path(
-                "s2", low_or_high, version, task["year"], prefix="ausp"
+                "s2", low_or_high, version, task["year"], prefix=prefix
             )
             stac_path = itempath.stac_path(task["tile-id"])
 
