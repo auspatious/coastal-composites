@@ -17,6 +17,7 @@ def main(
     limit: Optional[str] = None,
     low_or_high: Optional[str] = "low",
     output_bucket: Optional[str] = None,
+    output_prefix: Optional[str] = None,
     overwrite: Annotated[bool, typer.Option()] = False,
 ) -> None:
     tiles = get_tile_list()
@@ -51,6 +52,10 @@ def main(
                 "s2", low_or_high, version, task["year"], prefix="ausp"
             )
             stac_path = itempath.stac_path(task["tile-id"])
+
+            if output_prefix is not None:
+                stac_path = f"{output_prefix}/{stac_path}"
+
             exists = False
             if output_bucket is not None:
                 exists = object_exists(output_bucket, stac_path)

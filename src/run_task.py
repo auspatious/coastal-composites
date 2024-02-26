@@ -1,9 +1,13 @@
+from datetime import datetime, timezone
+
 import boto3
 import geopandas as gpd
 import pandas as pd
 import typer
+from coastlines.combined import mask_pixels_by_tide
 from coastlines.grids import VIETNAM_10
 from dask.distributed import Client
+from dateutil.relativedelta import relativedelta
 from dea_tools.coastal import pixel_tides
 from dep_tools.aws import object_exists
 from dep_tools.azure import blob_exists
@@ -14,19 +18,10 @@ from dep_tools.processors import S2Processor
 from dep_tools.searchers import PystacSearcher
 from dep_tools.utils import get_logger
 
-from odc.algo import mask_cleanup, erase_bad
-
-from coastlines.combined import mask_pixels_by_tide
-
-from odc.geo.geobox import scaled_down_geobox
-
-from datetime import datetime, timezone
-
-from dateutil.relativedelta import relativedelta
-
 # from dep_tools.task import SimpleLoggingAreaTask
 from dep_tools.writers import AwsDsCogWriter, AzureDsWriter
-from odc.algo import geomedian_with_mads
+from odc.algo import erase_bad, geomedian_with_mads, mask_cleanup
+from odc.geo.geobox import scaled_down_geobox
 from odc.geo.gridspec import GridSpec
 from planetary_computer import sign_url
 from typing_extensions import Annotated
@@ -186,6 +181,7 @@ def main(
     tide_data_location: str = "~/tide_models",
     extra_months: int = 12,
     output_bucket: str = None,
+    output_prefix: str = None,
     decimated: bool = False,
     grid_definition: str = "VIETNAM_10",
     overwrite: Annotated[bool, typer.Option()] = False,
@@ -206,6 +202,9 @@ def main(
     stac_document = itempath.stac_path(
         tile_id,
     )
+
+    if output_prefix is not None:
+        stac_document = f"{output_prefix}/{stac_document}"
 
     # If we don't want to overwrite, and the destination file already exists, skip it
     if not overwrite:
